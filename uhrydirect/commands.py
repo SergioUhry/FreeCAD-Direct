@@ -286,8 +286,8 @@ class CmdMoverArvore:
             "Pixmap": _icon("MoveTree.svg"),
             "MenuText": "Mover na Árvore",
             "ToolTip": (
-                "Reorganiza objetos entre contêineres da árvore preservando "
-                "a posição/orientação global."
+                "Move um ou vários objetos entre contêineres da árvore, "
+                "preservando a posição/orientação global."
             ),
         }
 

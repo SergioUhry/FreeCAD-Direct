@@ -2,7 +2,7 @@
 
 Workbench para FreeCAD voltada a modelagem direta, posicionamento, linhas guia, medição e matrizes.
 
-**Versão:** 0.9.0  
+**Versão:** 0.9.2  
 **FreeCAD:** 1.1+
 
 ## Conteúdo
@@ -207,6 +207,16 @@ Quando a seleção não é Face → Face, a ferramenta resolve um ponto para cad
 - face: usa o canto mais próximo do clique.
 
 A orientação da peça é preservada no modo Ponto → Ponto.
+
+#### Linha Guia → plano de uma face
+
+Selecione uma ou várias Linhas Guia e, por último, uma face plana de destino.
+
+- as guias são projetadas para o plano pela direção da vista atual;
+- em vista ortográfica, o centro da guia permanece no mesmo ponto visual da tela;
+- a guia precisa ser paralela ao plano da face;
+- a geometria global é resolvida sem reaplicar `Placement`;
+- várias guias podem ser posicionadas na mesma operação.
 
 **Objetos móveis**
 
@@ -455,12 +465,14 @@ Esta ferramenta não é o comando de movimentação 3D.
 - devolve o objeto para a raiz do documento;
 - preserva o Placement global.
 
-**Dois objetos selecionados**
+**Duas ou mais seleções**
 
-1. primeiro: objeto que será movido na árvore;
-2. segundo: contêiner de destino.
+1. selecione um ou vários objetos que serão movidos;
+2. selecione por último o contêiner de destino.
 
-A ferramenta transfere o primeiro para o segundo e restaura a posição global após a troca de referencial.
+Todos os objetos anteriores à última seleção são movidos para o mesmo destino. A posição e a orientação global de cada objeto são restauradas após a troca de referencial.
+
+Com apenas duas seleções, o comportamento permanece igual: primeiro o objeto, depois o destino.
 
 **Proteções**
 
@@ -486,7 +498,7 @@ A interface pública da bancada usa o nome **Direct**.
 
 Alguns nomes de propriedades, comandos e módulos internos anteriores são mantidos para preservar compatibilidade com documentos já criados. Esses identificadores não alteram o nome exibido da bancada.
 
-A versão 0.9.0 foi desenvolvida para FreeCAD 1.1+.
+A versão 0.9.2 foi desenvolvida para FreeCAD 1.1+.
 
 ## Licença
 

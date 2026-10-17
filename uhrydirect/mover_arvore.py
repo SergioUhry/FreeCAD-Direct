@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Reorganiza objetos na árvore do FreeCAD preservando o Placement global.
 
-Com um objeto selecionado, move-o para a raiz. Com dois objetos selecionados,
-o primeiro é movido para o contêiner indicado pelo segundo. Features internas
-de PartDesign::Body são protegidas contra movimentação isolada.
+Com um objeto selecionado, move-o para a raiz. Com duas ou mais seleções,
+o último objeto é o contêiner de destino e todos os anteriores são movidos
+para ele. Features internas de PartDesign::Body não são movidas isoladamente.
 """
 
 import math
@@ -401,28 +401,67 @@ else:
                 "Mover Objeto cancelado: {}\n".format(e)
             )
 
-    elif len(sel) == 2:
-        objeto = sel[0]
-        destino = sel[1]
+    elif len(sel) >= 2:
+        objetos = list(sel[:-1])
+        destino = sel[-1]
 
         try:
-            doc.openTransaction("Mover Objeto")
+            if not pode_receber_objetos(destino):
+                raise ValueError(
+                    "'{}' não aceita objetos filhos na árvore do FreeCAD.".format(
+                        destino.Label
+                    )
+                )
 
-            pais, dp, dr = mover_para_destino(
-                objeto, destino, doc
-            )
+            # Valida o lote antes de alterar a árvore.
+            for objeto in objetos:
+                if objeto is destino:
+                    raise ValueError("O objeto e o destino não podem ser o mesmo.")
+                if objeto.Document is not destino.Document:
+                    raise ValueError(
+                        "Todos os objetos e o destino precisam estar no mesmo documento."
+                    )
+                if eh_descendente(destino, objeto):
+                    raise ValueError(
+                        "Não é possível mover '{}' para dentro de um descendente dele.".format(
+                            objeto.Label
+                        )
+                    )
+                validar_partdesign(objeto, destino)
+
+            doc.openTransaction("Mover Objetos na Árvore")
+
+            resultados = []
+            for objeto in objetos:
+                pais, dp, dr = mover_para_destino(objeto, destino, doc)
+                resultados.append((objeto, dp, dr))
 
             doc.commitTransaction()
 
             Gui.Selection.clearSelection()
-            Gui.Selection.addSelection(objeto)
+            for objeto, _, _ in resultados:
+                Gui.Selection.addSelection(objeto)
 
-            App.Console.PrintMessage(
-                "{} movido para {}. "
-                "Δpos={:.6f} mm | Δrot={:.6f}°\n".format(
-                    objeto.Label, destino.Label, dp, dr
+            if len(resultados) == 1:
+                objeto, dp, dr = resultados[0]
+                App.Console.PrintMessage(
+                    "{} movido para {}. "
+                    "Δpos={:.6f} mm | Δrot={:.6f}°\n".format(
+                        objeto.Label, destino.Label, dp, dr
+                    )
                 )
-            )
+            else:
+                App.Console.PrintMessage(
+                    "{} objetos movidos para {}.\n".format(
+                        len(resultados), destino.Label
+                    )
+                )
+                for objeto, dp, dr in resultados:
+                    App.Console.PrintMessage(
+                        "- {} | Δpos={:.6f} mm | Δrot={:.6f}°\n".format(
+                            objeto.Label, dp, dr
+                        )
+                    )
 
         except Exception as e:
             try:
@@ -434,10 +473,3 @@ else:
             App.Console.PrintError(
                 "Mover Objeto cancelado: {}\n".format(e)
             )
-
-    else:
-        App.Console.PrintError(
-            "\nMover Objeto — árvore:\n"
-            "• 1 seleção: devolve o objeto para a raiz.\n"
-            "• 2 seleções: primeiro o objeto; depois o contêiner de destino.\n"
-        )
