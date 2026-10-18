@@ -267,6 +267,60 @@ def transformed_subelement(obj, subname):
         )
 
 
+def is_guide_object(obj):
+    """Reconhece Linha Guia Direct, inclusive documentos legados."""
+    if obj is None:
+        return False
+    props = set(getattr(obj, "PropertiesList", []))
+    try:
+        if DIRECT_GUIDE_FLAG in props and bool(getattr(obj, DIRECT_GUIDE_FLAG, False)):
+            return True
+    except Exception:
+        pass
+    try:
+        if GUIDE_FLAG in props and bool(getattr(obj, GUIDE_FLAG, False)):
+            return True
+    except Exception:
+        pass
+    return str(getattr(obj, "Name", "")).startswith("UhryGuia")
+
+
+def global_object_shape(obj):
+    """Retorna a Shape visível do objeto em coordenadas globais.
+
+    É especialmente importante para Linhas Guia que já foram reposicionadas:
+    a Shape local continua na posição em que nasceu, enquanto o Placement do
+    objeto passa a carregar o deslocamento atual.
+    """
+    try:
+        shape = Part.getShape(
+            obj,
+            "",
+            needSubElement=False,
+            transform=True,
+        )
+        if shape is not None and not shape.isNull():
+            return shape
+    except Exception:
+        pass
+
+    if hasattr(obj, "Shape") and obj.Shape is not None and not obj.Shape.isNull():
+        shape = obj.Shape.copy()
+        try:
+            pl_global = obj.getGlobalPlacement()
+            pl_local = obj.Placement
+            pl_parents = pl_global * pl_local.inverse()
+            shape.Placement = pl_parents * shape.Placement
+        except Exception:
+            try:
+                shape.Placement = obj.Placement * shape.Placement
+            except Exception:
+                pass
+        return shape
+
+    raise ValueError(f"{obj.Label}: objeto sem geometria válida.")
+
+
 def selected_items():
     items = []
 
@@ -282,9 +336,19 @@ def selected_items():
             for index, subname in enumerate(sel.SubElementNames):
                 shape = None
 
-                # O SubObject vindo diretamente do clique já corresponde à instância
-                # visual correta (por exemplo, a segunda peça da matriz).
-                if index < len(subobjects):
+                # Linhas Guia podem ter sido movidas depois da criação. Nesse caso
+                # obj.Shape/SubObjects ainda podem representar a geometria local
+                # antiga. Para guia, a fonte da verdade é sempre a geometria global
+                # resolvida pelo FreeCAD com transform=True.
+                if is_guide_object(obj):
+                    try:
+                        shape = transformed_subelement(obj, subname)
+                    except Exception:
+                        shape = None
+
+                # Para peças normais/matrizes preservamos o SubObject do clique,
+                # pois ele identifica corretamente a instância visual selecionada.
+                if shape is None and index < len(subobjects):
                     candidate = subobjects[index]
                     if getattr(candidate, "ShapeType", ""):
                         try:
@@ -298,12 +362,19 @@ def selected_items():
                 items.append((obj, subname, shape))
 
         else:
-            # Seleção do objeto inteiro na Árvore do Modelo
-            if hasattr(obj, 'Shape') and obj.Shape:
-                if obj.Shape.ShapeType == 'Edge':
-                    items.append((obj, "Edge1", obj.Shape))
-                elif obj.Shape.Edges:
-                    items.append((obj, "Edge1", obj.Shape.Edges[0]))
+            # Seleção do objeto inteiro na Árvore do Modelo. Nunca usamos
+            # obj.Shape cru aqui: uma Linha Guia reposicionada teria a forma
+            # local antiga e o novo Placement seria ignorado.
+            try:
+                resolved = global_object_shape(obj)
+            except Exception:
+                resolved = None
+
+            if resolved is not None and not resolved.isNull():
+                if resolved.ShapeType == 'Edge':
+                    items.append((obj, "Edge1", resolved))
+                elif resolved.Edges:
+                    items.append((obj, "Edge1", resolved.Edges[0]))
 
     return items
 
@@ -311,7 +382,18 @@ def selected_items():
 
 def straight_edge_data(obj, subname, shape=None):
 
-    shape = shape if shape is not None else transformed_subelement(obj, subname)
+    # Para Linhas Guia, sempre releia a aresta em coordenadas globais atuais.
+    # Isso evita reutilizar a Shape local anterior quando a própria guia foi
+    # movida para outro plano pela ferramenta Posicionar Peça.
+    if is_guide_object(obj):
+        try:
+            shape = transformed_subelement(obj, subname)
+        except Exception:
+            if shape is None:
+                resolved = global_object_shape(obj)
+                shape = resolved if resolved.ShapeType == "Edge" else resolved.Edges[0]
+    else:
+        shape = shape if shape is not None else transformed_subelement(obj, subname)
 
     if getattr(shape, "ShapeType", "") != "Edge":
 
@@ -1926,7 +2008,7 @@ class DirectGuideTool(QtCore.QObject):
                 pass
 
             App.Console.PrintError(
-                "Linha Guia 2.4 — erro ao confirmar: {}\n".format(exc)
+                "Linha Guia 2.5 — erro ao confirmar: {}\n".format(exc)
             )
             try:
                 QtWidgets.QMessageBox.critical(

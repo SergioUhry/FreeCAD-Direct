@@ -12,7 +12,14 @@ class DirectWorkbench(Workbench):
 
     def Initialize(self):
         from uhrydirect.commands import register_commands, COMMAND_IDS
+        from uhrydirect.guide_intersection_snap import (
+            reset_runtime_state,
+            schedule_force_ui_unchecked,
+        )
 
+        # O Snap Direct sempre inicia desligado. Ele só deve ser ativado
+        # manualmente quando o usuário precisar dos cruzamentos das guias.
+        reset_runtime_state()
         register_commands()
 
         commands = [
@@ -36,6 +43,15 @@ class DirectWorkbench(Workbench):
 
         self.appendToolbar("Direct", commands)
         self.appendMenu("Direct", commands)
+
+        try:
+            FreeCADGui.updateCommands()
+        except Exception:
+            pass
+
+        # Ações checkable podem conservar estado visual entre sessões.
+        # O Snap Direct deve aparecer sempre desligado ao carregar a bancada.
+        schedule_force_ui_unchecked()
 
     def Activated(self):
         pass

@@ -421,6 +421,53 @@ class DirectMoveCommand(gui_move.Move):
     - constraints e atalhos do Draft.
     """
 
+    def _direct_snap_point(self, arg, update_visual=True):
+        try:
+            from .guide_intersection_snap import point_for_screen
+            pos = arg.get("Position") if isinstance(arg, dict) else None
+            if pos is None:
+                return None
+            return point_for_screen(pos, update_visual=update_visual)
+        except Exception:
+            return None
+
+    def handle_mouse_move_event(self, arg):
+        """Usa diretamente o cruzamento Direct no pipeline do Draft Move."""
+        point = self._direct_snap_point(arg, update_visual=True)
+        if point is None:
+            return super().handle_mouse_move_event(arg)
+
+        # Mesmo fluxo do Draft Move, substituindo somente o ponto calculado.
+        for ghost in self.ghosts:
+            ghost.off()
+
+        self.point = App.Vector(point)
+        if len(self.node) > 0:
+            last = self.node[len(self.node) - 1]
+            self.vector = self.point.sub(last)
+        else:
+            self.vector = None
+
+        for ghost in self.ghosts:
+            if self.vector:
+                ghost.move(self.vector)
+            ghost.on()
+
+        if self.extendedCopy:
+            if not gui_move.gui_tool_utils.hasMod(
+                arg, gui_move.gui_tool_utils.get_mod_alt_key()
+            ):
+                self.finish()
+
+        gui_move.gui_tool_utils.redraw3DView()
+
+    def handle_mouse_click_event(self, arg):
+        """No clique, confirma o cruzamento exato em vez do ponto livre."""
+        point = self._direct_snap_point(arg, update_visual=True)
+        if point is not None:
+            self.point = App.Vector(point)
+        return super().handle_mouse_click_event(arg)
+
     def _logical_targets(self):
         targets = exact_selected_objects(getattr(self, "selection", []))
         if not targets:

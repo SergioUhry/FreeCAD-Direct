@@ -178,10 +178,13 @@ class CmdGuideIntersectionSnap:
             "MenuText": "Snap Cruzamento de Guias",
             "ToolTip": (
                 "Liga/desliga um snap exclusivo para cruzamentos reais entre "
-                "Linhas Guia. Selecione primeiro a referencia da peca, "
-                "clique no cruzamento e depois use Posicionar Peca."
+                "Linhas Guia. Enquanto ativo, bloqueia temporariamente todos "
+                "os snaps nativos Draft/BIM e restaura o estado anterior ao desligar."
             ),
             "Checkable": True,
+            # Permite ligar/desligar o Snap Direct enquanto um comando Draft
+            # (por exemplo Mover por Pontos) esta ativo no painel Tarefas.
+            "CmdType": "ForEdit",
         }
 
     def IsActive(self):
@@ -190,8 +193,11 @@ class CmdGuideIntersectionSnap:
     def IsChecked(self):
         return guide_snap_is_active()
 
-    def Activated(self):
-        toggle_guide_snap()
+    def Activated(self, checked=None):
+        # Comandos checkable do FreeCAD recebem o estado (0/1) na ativacao.
+        # Aceitamos esse argumento para permitir ligar/desligar o Snap Direct
+        # inclusive durante um comando Draft ativo, como Mover por Pontos.
+        return toggle_guide_snap(checked)
 
 
 class CmdPieceFromGuides:

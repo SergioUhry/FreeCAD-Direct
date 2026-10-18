@@ -2,7 +2,7 @@
 
 Workbench para FreeCAD voltada a modelagem direta, posicionamento, linhas guia, medição e matrizes.
 
-**Versão:** 0.9.2  
+**Versão:** 0.9.8  
 **FreeCAD:** 1.1+
 
 ## Conteúdo
@@ -287,6 +287,9 @@ A janela também permite:
 
 ### Snap Cruzamento de Guias
 
+O Snap Direct inicia **desligado**. Quando ativado, ele funciona em modo exclusivo: desliga temporariamente os snaps nativos e captura somente cruzamentos reais entre Linhas Guia. Durante **Mover por Pontos**, o cruzamento é entregue diretamente ao ponto consumido pelo comando Draft. Ao desligar o Snap Direct, o estado anterior dos snaps nativos é restaurado.
+
+
 Ativa um snap dedicado aos cruzamentos geométricos reais entre Linhas Guia.
 
 **Como usar**
@@ -301,6 +304,8 @@ Ativa um snap dedicado aos cruzamentos geométricos reais entre Linhas Guia.
 
 - somente cruzamentos 3D válidos são considerados;
 - cruzamentos apenas aparentes na tela, sem interseção geométrica real, são ignorados;
+- enquanto o Snap Direct está ativo, os snaps nativos Draft/BIM são temporariamente desativados e bloqueados;
+- ao desligar o Snap Direct, o estado anterior dos snaps nativos é restaurado;
 - a ferramenta usa um ponto temporário de seleção para entregar o cruzamento às demais ferramentas;
 - o botão é do tipo liga/desliga.
 
