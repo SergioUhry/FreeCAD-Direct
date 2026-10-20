@@ -7,8 +7,8 @@ Matriz ortogonal leve baseada em Draft Link Array e modo especial
 No modo Par oposto:
 - há sempre 2 peças: a original + 1 espelhada;
 - escolhe-se o eixo X/Y/Z em que a duplicata ficará;
-- a segunda peça é um Part::Mirroring nativo e paramétrico;
-- o plano de espelho fica exatamente no meio entre as duas posições;
+- a segunda ocorrência usa escala vetorial negativa no eixo escolhido;
+- as ocorrências são expostas na árvore com aparência herdada da origem;
 - assim, a face extrema da origem fica frente a frente com a face extrema
   correspondente da peça oposta.
 
@@ -133,6 +133,90 @@ def copy_view_style(source, target):
                 setattr(tv, prop, getattr(sv, prop))
         except Exception:
             pass
+
+
+def _inherit_material(obj):
+    view = getattr(obj, 'ViewObject', None)
+    if view is None:
+        return
+    if hasattr(view, 'OverrideMaterial'):
+        view.OverrideMaterial = False
+    if hasattr(view, 'OverrideMaterialList'):
+        values = list(view.OverrideMaterialList)
+        if values:
+            view.OverrideMaterialList = [False] * len(values)
+
+
+def prepare_opposite(array):
+    """Expande duas ocorrências sem perder vetores de escala ou posicionamento.
+
+    O Draft mapeia ShowElement para ExpandArray. A expansão do núcleo pode
+    inicializar Scale apenas com a componente X; reaplicamos ScaleVector para
+    preservar exatamente os espelhamentos em X, Y ou Z.
+    A transação é de responsabilidade do chamador.
+    """
+    doc = array.Document
+    if not hasattr(array, 'ExpandArray'):
+        raise RuntimeError('A matriz selecionada não oferece ExpandArray.')
+    if not getattr(array, 'UhryParOposto', False):
+        raise RuntimeError('A matriz não está identificada como par oposto.')
+    count = 1
+    for axis in 'XYZ':
+        count *= int(getattr(array, 'Number' + axis, 1))
+    if count != 2:
+        raise RuntimeError('O par oposto precisa ter exatamente duas ocorrências.')
+
+    existing = list(getattr(array, 'ElementList', []))
+    expanded = bool(array.ExpandArray)
+    scales = list(getattr(array, 'ScaleList', []))
+    if expanded and len(existing) == 2:
+        scales = [App.Vector(item.ScaleVector) for item in existing]
+    elif len(scales) != 2:
+        # Não inventar uma transformação quando não houver informação suficiente.
+        raise RuntimeError('Não foi possível recuperar as escalas das duas ocorrências.')
+    scales = [App.Vector(value) for value in scales]
+
+    _inherit_material(array)
+    if not expanded:
+        array.ExpandArray = True
+    doc.recompute()
+    elements = list(getattr(array, 'ElementList', []))
+    if len(elements) != 2:
+        raise RuntimeError('O FreeCAD não disponibilizou as duas ocorrências da matriz.')
+    for element, scale in zip(elements, scales):
+        if not hasattr(element, 'ScaleVector'):
+            raise RuntimeError('A ocorrência não oferece escala vetorial compatível.')
+        element.ScaleVector = scale
+        _inherit_material(element)
+
+    if hasattr(array, 'AlwaysSyncPlacement'):
+        array.AlwaysSyncPlacement = True
+    doc.recompute()
+    for element, scale in zip(elements, scales):
+        actual = element.ScaleVector
+        if any(abs(getattr(actual, axis) - getattr(scale, axis)) > 1e-9 for axis in 'xyz'):
+            raise RuntimeError('O FreeCAD não preservou a escala da ocorrência.')
+    return elements
+
+
+def _find_pairs(objects):
+    seen = set()
+    pairs = []
+    pending = list(objects)
+    while pending:
+        obj = pending.pop(0)
+        key = (obj.Document.Name, obj.Name)
+        if key in seen:
+            continue
+        seen.add(key)
+        if getattr(obj, 'UhryParOposto', False):
+            pairs.append(obj)
+        # Uma matriz externa aponta para o par interno por Base.
+        source = getattr(obj, 'Base', None)
+        if source is not None and hasattr(source, 'Document'):
+            pending.append(source)
+    return pairs
+
 
 
 def ensure_opposite_properties(container):
@@ -688,6 +772,7 @@ class MatrixDialog(QtWidgets.QDialog):
         )
 
         ensure_dynamic_totals(array, self.source)
+        prepare_opposite(array)
 
         self.source.ViewObject.Visibility = False
         array.ViewObject.Visibility = True
@@ -721,6 +806,11 @@ class MatrixDialog(QtWidgets.QDialog):
 
         self.doc.openTransaction('Matriz Leve')
         try:
+            # Pares antigos compactos são preparados no fluxo normal da matriz.
+            # Pares já expandidos conservam suas personalizações visuais.
+            for pair in _find_pairs([self.source]):
+                if not bool(getattr(pair, 'ExpandArray', False)):
+                    prepare_opposite(pair)
             if self.opposite.isChecked():
                 array = self._create_or_update_opposite(counts, steps, totals)
             else:
