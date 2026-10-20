@@ -98,3 +98,12 @@ except Exception:
     DirectWorkbench.Icon = ""
 
 FreeCADGui.addWorkbench(DirectWorkbench())
+
+
+# DIRECT_PARAMETERS_PANEL_0_1
+try:
+    from uhrydirect import parameters_panel as _direct_parameters_panel
+    _direct_parameters_panel.install()
+except Exception:
+    import traceback
+    App.Console.PrintError(traceback.format_exc())

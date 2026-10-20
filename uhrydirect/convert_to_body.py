@@ -2,6 +2,7 @@
 
 import FreeCAD as App
 import FreeCADGui as Gui
+from .parametric_body_base import create_base
 
 
 def placement_global(obj):
@@ -275,14 +276,6 @@ def run():
         for sketch in sketches
     }
 
-    try:
-        shape_local = origem.Shape.copy()
-    except Exception as exc:
-        App.Console.PrintError(
-            "Direct — não consegui copiar a Shape do objeto: {}\n".format(exc)
-        )
-        return False
-
     doc.openTransaction(
         "Direct - Converter para Body"
     )
@@ -305,15 +298,7 @@ def run():
         else:
             body.Placement = origem_global
 
-        base = body.newObject(
-            "PartDesign::Feature",
-            "Base_Direct",
-        )
-        base.Label = "Base_Direct"
-        base.Shape = shape_local
-        base.Placement = App.Placement()
-
-        copiar_aparencia(origem, base)
+        base = create_base(body, origem, copiar_aparencia)
 
         for sketch in sketches:
             mover_sketch_para_body(
@@ -324,8 +309,7 @@ def run():
 
         doc.recompute()
 
-        # Remove o objeto original somente depois de tudo estar válido.
-        doc.removeObject(origem_name)
+        # A fonte permanece viva para conservar dimensões, expressões e histórico.
 
         doc.recompute()
         doc.commitTransaction()
@@ -354,7 +338,7 @@ def run():
         "Body criado: {}\n"
         "Base interna: Base_Direct\n"
         "Sketches incorporados: {}\n"
-        "Objeto original removido: SIM\n"
+        "Objeto original preservado: SIM — expandir Base_Direct\n"
         "====================================\n".format(
             origem_label,
             body.Label,

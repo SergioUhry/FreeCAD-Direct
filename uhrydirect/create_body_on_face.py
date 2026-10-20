@@ -319,11 +319,6 @@ def converter_para_body(doc, origem):
     origem_global = placement_global(origem)
     part_pai = encontrar_part_pai(origem)
 
-    try:
-        shape_local = origem.Shape.copy()
-    except Exception as exc:
-        raise RuntimeError('Não consegui copiar a Shape do objeto: {}'.format(exc))
-
     body = doc.addObject('PartDesign::Body', 'Body')
     body.Label = origem_label
 
@@ -333,14 +328,8 @@ def converter_para_body(doc, origem):
     else:
         body.Placement = origem_global
 
-    base = body.newObject('PartDesign::Feature', 'Base_Direct')
-    base.Label = 'Base_Direct'
-    base.Shape = shape_local
-    base.Placement = App.Placement()
-    copiar_aparencia(origem, base)
-
-    doc.recompute()
-    doc.removeObject(origem_name)
+    from .parametric_body_base import create_base
+    base = create_base(body, origem, copiar_aparencia)
     doc.recompute()
 
     return body, base

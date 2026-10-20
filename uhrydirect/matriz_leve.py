@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Matriz Leve — FreeCAD 1.1+
+"""Matriz Leve Uhry 1.13b — FreeCAD 1.1+
 
 Matriz ortogonal leve baseada em Draft Link Array e modo especial
 "Face oposta" para criar uma Draft Link Array nativa com a 2ª peça invertida (esquerda/direita).
@@ -80,7 +80,7 @@ def _length_value(value):
 def spans_for(obj):
     """Dimensões usadas pela lógica da macro.
 
-    Para uma Matriz Leve já existente, a fonte de verdade são os totais internos X/Y/Z.
+    Para uma Matriz Uhry já existente, a fonte de verdade é UhryTotalX/Y/Z.
     Isso evita usar o BoundBox visual da Link Array (que pode variar com ScaleList
     e espelhamento) e garante que matriz sobre matriz use exatamente o total
     calculado pela etapa anterior. Para peças comuns, usa o BoundBox real.
@@ -116,7 +116,7 @@ def property_value(obj, name, default):
     return getattr(obj, name, default) if obj else default
 
 
-def add_prop(obj, typ, name, description, group='Matriz Direct'):
+def add_prop(obj, typ, name, description, group='Matriz Uhry'):
     if name not in obj.PropertiesList:
         obj.addProperty(typ, name, group, description)
 
@@ -136,8 +136,8 @@ def copy_view_style(source, target):
 
 
 def ensure_opposite_properties(container):
-    """Adiciona propriedades internas da Matriz Leve."""
-    add_prop(container, 'App::PropertyBool', 'UhryMatrizLeve', 'Matriz criada pela ferramenta Direct')
+    """Adiciona propriedades compatíveis com a Central Uhry e com esta macro."""
+    add_prop(container, 'App::PropertyBool', 'UhryMatrizLeve', 'Matriz criada pela macro Uhry')
     add_prop(container, 'App::PropertyBool', 'UhryParOposto', 'Par esquerda/direita com segunda peça espelhada')
     add_prop(container, 'App::PropertyBool', 'UhryNomeAutomatico', 'Atualizar nome ao aplicar pela macro')
     add_prop(container, 'App::PropertyBool', 'UhryModoVao', 'Entrada por vão externo')
@@ -175,12 +175,12 @@ def _set_expression(obj, prop, expr):
         obj.setExpression(prop, expr)
         return True
     except Exception as exc:
-        App.Console.PrintWarning('Matriz Leve: não foi possível vincular %s = %s (%s)\n' % (prop, expr, exc))
+        App.Console.PrintWarning('Matriz Uhry: não foi possível vincular %s = %s (%s)\n' % (prop, expr, exc))
         return False
 
 
 def ensure_dynamic_totals(array, source=None):
-    """Mantém os totais internos coerentes com a regra:
+    """Mantém os totais Uhry coerentes com a regra:
 
         Total = tamanho da origem + intervalo lógico * (quantidade - 1)
 
@@ -251,7 +251,7 @@ def configure_follow_source(array, source, gaps, steps, counts):
     """Em matriz sobre matriz, preserva o VÃO entre conjuntos.
 
     O Interval nativo da matriz externa passa a ser uma expressão:
-        total atual da matriz interna + vão desejado
+        Uhry Total atual da matriz interna + vão desejado
     Portanto, se a matriz interna ficar maior/menor, a matriz externa se reposiciona.
     """
     if array is None or source is None or not getattr(source, 'UhryMatrizLeve', False):
@@ -341,13 +341,21 @@ class MatrixDialog(QtWidgets.QDialog):
         layout.addWidget(special_box)
 
         self.mode = QtWidgets.QComboBox()
-        self.mode.addItems(['Informar intervalo entre posições', 'Informar vão entre limites externos', 'Informar total desejado'])
-        self.mode.setCurrentIndex(int(property_value(array, 'UhryModoVao', False)))
+        self.mode.addItems(['Preencher por intervalo', 'Preencher por vão', 'Preencher por total'])
+        
+        saved_mode = property_value(array, 'UhryModoEntrada', None)
+        if saved_mode is None:
+            saved_mode = 1 if property_value(array, 'UhryModoVao', False) else 0
+        try:
+            saved_mode = int(saved_mode)
+        except Exception:
+            saved_mode = 0
+        self.mode.setCurrentIndex(saved_mode if saved_mode in (0, 1, 2) else 0)
         layout.addWidget(self.mode)
 
         grid = QtWidgets.QGridLayout()
         layout.addLayout(grid)
-        headers = ['Eixo', 'Máx. seleção', 'Quantidade', 'Distância (mm)', 'Inverter', 'Intervalo', 'Vão', 'Total']
+        headers = ['Eixo', 'Máx. seleção', 'Quantidade', 'Distância (mm)', 'Inverter', 'Intervalo', 'Vão', 'Uhry Total']
         self.input_header = QtWidgets.QLabel(headers[3])
         for col, label in enumerate(headers):
             widget = self.input_header if col == 3 else QtWidgets.QLabel(label)
@@ -426,13 +434,12 @@ class MatrixDialog(QtWidgets.QDialog):
         layout.addWidget(self.opposite_info)
 
         note = QtWidgets.QLabel(
-            'Máx. seleção usa o total calculado quando a seleção já é uma Matriz Leve; para peça comum usa o tamanho real em X/Y/Z.\n'
-            'REGRA: Total = tamanho da seleção + intervalo × (quantidade - 1).\n'
+            'Máx. seleção usa Uhry Total quando a seleção já é uma Matriz Uhry; para peça comum usa o tamanho real em X/Y/Z.\n'
+            'REGRA ÚNICA: Uhry Total = tamanho da seleção + intervalo × (quantidade - 1).\n'
             'Exemplo: peça 92 mm, intervalo 1318 mm, quantidade 2 -> total 1410 mm.\n'
-            'Modo total desejado: informe o total final; o intervalo é calculado por (total - tamanho) / (quantidade - 1).\n'
+            'Modo Total desejado: você informa o total final e a macro calcula intervalo = (total - tamanho) / (quantidade - 1).\n'
             'Face oposta altera somente a orientação visual da 2ª posição; não altera a fórmula de intervalo/total.\n'
-            'Em matriz sobre matriz, o tamanho da seleção é o total da matriz interna. '
-            'Se Face oposta estiver ativa, o conjunto inteiro é espelhado e o vão entre os conjuntos é preservado.'
+            'Em matriz sobre matriz, o tamanho da seleção é o Uhry Total da matriz interna e a mesma fórmula é aplicada novamente.'
         )
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -492,7 +499,7 @@ class MatrixDialog(QtWidgets.QDialog):
             return max(0.0, value)
         if mode_index == 1:  # vão externo
             return max(0.0, value + span)
-        # Total desejado -> calcula o intervalo.
+        # Total desejado -> calcula matematicamente o intervalo
         # Total = span + (count-1)*intervalo
         return max(0.0, (value - span) / float(count - 1))
 
@@ -575,17 +582,17 @@ class MatrixDialog(QtWidgets.QDialog):
             else:
                 self.name.setText('%d × %s' % (total, self.source.Label))
 
-    def _create_or_update_opposite(self, counts, steps, totals, gaps):
+    def _create_or_update_opposite(self, counts, steps, totals):
         """Cria Link Array nativa com a 2ª peça espelhada e total físico coerente.
 
-        O valor digitado na janela continua sendo o intervalo lógico.
+        O valor digitado na janela continua sendo o intervalo lógico Uhry.
         No eixo espelhado, o Interval nativo do Draft recebe automaticamente
         a largura da peça somada ao intervalo lógico. Exemplo:
 
             peça 92 mm + intervalo 1318 mm = Interval nativo 1410 mm
-            Total = 92 + 1318 = 1410 mm
+            Uhry Total = 92 + 1318 = 1410 mm
 
-        Assim a geometria real e o total calculado ficam iguais, sem depender de
+        Assim a geometria real e o Uhry Total ficam iguais, sem depender de
         calibração posterior.
         """
         axis_i = self._opposite_axis_index()
@@ -633,10 +640,11 @@ class MatrixDialog(QtWidgets.QDialog):
             array.ShowElement = False
 
         for typ, name, description in [
-            ('App::PropertyBool', 'UhryMatrizLeve', 'Matriz criada pela ferramenta Direct'),
+            ('App::PropertyBool', 'UhryMatrizLeve', 'Matriz criada pela macro Uhry'),
             ('App::PropertyBool', 'UhryParOposto', 'A segunda instância da Link Array está invertida'),
             ('App::PropertyBool', 'UhryNomeAutomatico', 'Atualizar nome ao aplicar pela macro'),
             ('App::PropertyBool', 'UhryModoVao', 'Entrada por vão externo'),
+            ('App::PropertyInteger', 'UhryModoEntrada', '0=Intervalo, 1=Vão, 2=Total'),
             ('App::PropertyString', 'UhryUltimoNome', 'Último nome atribuído pela macro'),
             ('App::PropertyString', 'UhryMedidasInfo', 'Referência das medidas'),
             ('App::PropertyString', 'UhryEixoOposto', 'Eixo da inversão X/Y/Z'),
@@ -646,7 +654,8 @@ class MatrixDialog(QtWidgets.QDialog):
         array.UhryMatrizLeve = True
         array.UhryParOposto = True
         array.UhryNomeAutomatico = self.auto.isChecked()
-        array.UhryModoVao = bool(self.mode.currentIndex())
+        array.UhryModoVao = (self.mode.currentIndex() == 1)
+        array.UhryModoEntrada = int(self.mode.currentIndex())
         array.UhryEixoOposto = axis
 
         # Guarda os intervalos lógicos separados dos intervalos técnicos do Draft.
@@ -659,7 +668,7 @@ class MatrixDialog(QtWidgets.QDialog):
 
         self.doc.recompute()
         if 'ScaleList' not in array.PropertiesList:
-            raise RuntimeError('Esta Link Array não expõe ScaleList neste módulo do FreeCAD.')
+            raise RuntimeError('Esta Link Array não expõe ScaleList nesta versão do FreeCAD.')
 
         normal = App.Vector(1.0, 1.0, 1.0)
         mirrored = App.Vector(1.0, 1.0, 1.0)
@@ -674,67 +683,11 @@ class MatrixDialog(QtWidgets.QDialog):
         array.Label = self.name.text().strip()
         array.UhryUltimoNome = array.Label
         array.UhryMedidasInfo = (
-            'Par oposto: o intervalo interno guarda o valor lógico; Interval do Draft recebe a compensação da dimensão da peça. '
+            'Par oposto: UhryIntervalo guarda o intervalo lógico; Interval do Draft recebe a compensação da dimensão da peça. '
             'Regra: Total = tamanho da origem + intervalo lógico × (quantidade - 1).'
         )
 
         ensure_dynamic_totals(array, self.source)
-
-        # Permite Face Oposta quando a origem já é outra Matriz Leve.
-        # Nesse caso, além de espelhar o conjunto inteiro, preservamos o vão físico
-        # entre os dois conjuntos quando a matriz interna mudar de tamanho.
-        if getattr(self.source, 'UhryMatrizLeve', False):
-            add_prop(
-                array, 'App::PropertyBool', 'UhrySegueBase',
-                'Intervalos acompanham automaticamente o tamanho da matriz de origem'
-            )
-            array.UhrySegueBase = True
-
-            for i, a in enumerate(AXES):
-                if counts[i] <= 1:
-                    continue
-
-                gap_name = 'UhryVao' + a
-                logical_name = 'UhryIntervalo' + a
-                source_total = 'UhryTotal' + a
-                component = a.lower()
-
-                add_prop(
-                    array, 'App::PropertyLength', gap_name,
-                    'Vão preservado entre os limites externos dos conjuntos no eixo ' + a
-                )
-                _clear_expression(array, gap_name)
-                setattr(array, gap_name, gaps[i])
-
-                # Intervalo lógico do par externo = tamanho atual da matriz interna + vão.
-                # Assim UhryTotal = tamanho da base + intervalo lógico = 2*base + vão.
-                if source_total in getattr(self.source, 'PropertiesList', []):
-                    _set_expression(
-                        array, logical_name,
-                        '%s.%s + %s' % (self.source.Name, source_total, gap_name)
-                    )
-
-                    # O Draft precisa de uma compensação adicional do tamanho da origem
-                    # porque a segunda instância está espelhada por ScaleList.
-                    sign = '-' if steps[i] < 0 else ''
-                    _set_expression(
-                        array, 'Interval%s.%s' % (a, component),
-                        '%s(%s.%s + %s)' % (
-                            sign, self.source.Name, source_total, logical_name
-                        )
-                    )
-
-            add_prop(
-                array, 'App::PropertyString', 'UhryEncadeamentoInfo',
-                'Como o par oposto externo acompanha a matriz interna'
-            )
-            array.UhryEncadeamentoInfo = (
-                'Par oposto sobre Matriz Leve: o conjunto inteiro é espelhado. '
-                'O vão externo é preservado automaticamente quando a matriz interna muda de tamanho.'
-            )
-
-            # Reaplica os totais depois de criar os vínculos dinâmicos.
-            ensure_dynamic_totals(array, self.source)
 
         self.source.ViewObject.Visibility = False
         array.ViewObject.Visibility = True
@@ -744,7 +697,7 @@ class MatrixDialog(QtWidgets.QDialog):
         counts, steps, totals, gaps = self.data()
 
         if math.prod(counts) > 10000:
-            QtWidgets.QMessageBox.warning(self, 'Quantidade', 'O limite é de 10.000 instâncias no total.')
+            QtWidgets.QMessageBox.warning(self, 'Quantidade', 'Esta versão aceita até 10.000 instâncias no total.')
             return
 
         if any(counts[i] > 1 and abs(steps[i]) < 1e-9 for i in range(3)):
@@ -769,7 +722,7 @@ class MatrixDialog(QtWidgets.QDialog):
         self.doc.openTransaction('Matriz Leve')
         try:
             if self.opposite.isChecked():
-                array = self._create_or_update_opposite(counts, steps, totals, gaps)
+                array = self._create_or_update_opposite(counts, steps, totals)
             else:
                 vectors = [
                     App.Vector(steps[0], 0, 0),
@@ -805,9 +758,10 @@ class MatrixDialog(QtWidgets.QDialog):
                     array.ExpandArray = False
 
                 for typ, name, description in [
-                    ('App::PropertyBool', 'UhryMatrizLeve', 'Matriz criada pela ferramenta Direct'),
+                    ('App::PropertyBool', 'UhryMatrizLeve', 'Matriz criada pela macro Uhry'),
                     ('App::PropertyBool', 'UhryNomeAutomatico', 'Atualizar nome ao aplicar pela macro'),
                     ('App::PropertyBool', 'UhryModoVao', 'Entrada por vão externo'),
+                    ('App::PropertyInteger', 'UhryModoEntrada', '0=Intervalo, 1=Vão, 2=Total'),
                     ('App::PropertyString', 'UhryUltimoNome', 'Último nome atribuído pela macro'),
                     ('App::PropertyString', 'UhryMedidasInfo', 'Referência das medidas'),
                 ]:
@@ -815,18 +769,19 @@ class MatrixDialog(QtWidgets.QDialog):
 
                 array.UhryMatrizLeve = True
                 array.UhryNomeAutomatico = self.auto.isChecked()
-                array.UhryModoVao = bool(self.mode.currentIndex())
+                array.UhryModoVao = (self.mode.currentIndex() == 1)
+                array.UhryModoEntrada = int(self.mode.currentIndex())
                 array.Label = self.name.text().strip()
                 array.UhryUltimoNome = array.Label
                 array.UhryMedidasInfo = (
-                    'Regra: Total = tamanho da origem + intervalo × (quantidade - 1). '
+                    'Regra: Uhry Total = tamanho da origem + intervalo × (quantidade - 1). '
                     'Reabrir após mudar a origem.'
                 )
 
-                # Totais dinâmicos acompanham Number/Interval.
+                # Totais dinâmicos: UhryTotal muda junto com Number/Interval.
                 ensure_dynamic_totals(array, self.source)
 
-                # Em matriz sobre matriz, preserva o vão entre conjuntos.
+                # Se a origem é outra Matriz Uhry, preserva o vão entre conjuntos
                 # e faz a matriz externa acompanhar automaticamente o tamanho da base.
                 configure_follow_source(array, self.source, gaps, steps, counts)
 
@@ -840,7 +795,7 @@ class MatrixDialog(QtWidgets.QDialog):
             self.doc.commitTransaction()
             Gui.Selection.clearSelection()
             Gui.Selection.addSelection(array)
-            App.Console.PrintMessage('\nMatriz Leve: %s\n' % array.Label)
+            App.Console.PrintMessage('\nMatriz Uhry: %s\n' % array.Label)
             self.accept()
 
         except Exception as exc:
@@ -852,19 +807,21 @@ class MatrixDialog(QtWidgets.QDialog):
 
 def run():
     if App.ActiveDocument is None:
-        raise ValueError('Abra um documento e selecione uma peça, Body, Part ou uma Matriz Leve.')
+        raise ValueError('Abra um documento e selecione uma peça, Body, Part ou uma matriz Uhry.')
 
     selected = Gui.Selection.getSelection()
     if len(selected) != 1:
-        raise ValueError('Selecione uma peça, Body, Part ou uma Matriz Leve.')
+        raise ValueError('Selecione uma peça, Body, Part ou uma matriz Uhry.')
 
     obj = selected[0]
 
-    # Uma matriz selecionada pode ser usada como origem de uma nova matriz.
+    # v1.8: matriz selecionada = ORIGEM de uma nova matriz.
+    # Não entra automaticamente em modo de edição.
+    # Fluxo desejado: peça -> par oposto -> nova matriz repetindo o par.
     if getattr(obj, 'UhryMatrizLeve', False):
         source = obj
         array = None
-        App.Console.PrintMessage('\nMatriz Leve: criando matriz encadeada sobre: %s\n' % obj.Label)
+        App.Console.PrintMessage('\nMatriz Uhry 1.13b: criando nova matriz encadeada sobre: %s\n' % obj.Label)
     else:
         source = body_for(obj)
         array = None
@@ -880,21 +837,16 @@ def run():
 
     dialog = MatrixDialog(source, array)
 
-    # Uma Matriz Leve também pode ser usada como origem de outro conjunto.
-    # par com face oposta. Nesse caso a segunda posição espelha o CONJUNTO
-    # inteiro, e não apenas a peça original da matriz interna.
+    # Quando a origem já é uma matriz, a nova matriz deve repetir o conjunto
+    # inteiro. Face oposta fica desligada por padrão, pois isso pertence à
+    # matriz interna (por exemplo, o par esquerda/direita).
     if getattr(source, 'UhryMatrizLeve', False):
         try:
             dialog.opposite.setChecked(False)
-            dialog.opposite.setEnabled(True)
+            dialog.opposite.setEnabled(False)
             dialog.opposite_axis.setEnabled(False)
-            dialog.opposite.setToolTip(
-                'A origem já é uma Matriz Leve. Ative para criar uma segunda '
-                'cópia do conjunto inteiro com face oposta.'
-            )
-            dialog.setWindowTitle(
-                'Matriz Leve — Criar matriz sobre matriz'
-            )
+            dialog.opposite.setToolTip('A origem já é uma matriz. Esta etapa repete o conjunto inteiro.')
+            dialog.setWindowTitle('Matriz Leve — Criar matriz sobre matriz')
         except Exception:
             pass
 
