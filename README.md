@@ -16,6 +16,9 @@ A Direct reúne ferramentas para acelerar tarefas de modelagem e montagem manten
 
 - [Objetivo](#objetivo)
 - [Instalação](#instalação)
+  - [Windows](#instalação-no-windows)
+  - [Linux por Git](#instalação-por-git-no-linux)
+- [Leitura das figuras](#leitura-das-figuras)
 - [Conceitos básicos](#conceitos-básicos)
 - [Ferramentas](#ferramentas)
   - [Parâmetros](#parâmetros)
@@ -74,6 +77,69 @@ Esse comando apenas informa o diretório de dados do usuário. A pasta da bancad
 
 A bancada utiliza os recursos instalados do FreeCAD, incluindo Draft, Part Design, Sketcher e a interface Qt distribuída com o programa. Não é necessário instalar bibliotecas Python externas para os fluxos descritos aqui.
 
+### Instalação no Windows
+
+O procedimento manual permite instalar a bancada pelo Explorador de Arquivos, sem terminal, Git ou instalação separada de Python.
+
+**1. Identificar o diretório usado pelo FreeCAD**
+
+1. Abra o FreeCAD.
+2. No menu **Exibir → Painéis**, habilite **Console Python**. Em uma interface em inglês, use **View → Panels → Python console**.
+3. Digite no console do próprio FreeCAD:
+
+```python
+App.getUserAppDataDir()
+```
+
+4. Pressione `Enter` e anote o caminho retornado. Não execute esse comando no Prompt de Comando nem no PowerShell: ele depende do ambiente interno do FreeCAD.
+5. Feche o FreeCAD antes de copiar os módulos.
+
+O diretório tradicional de módulos do usuário fica sob `%APPDATA%\FreeCAD\Mod`. Algumas instalações separam os dados por versão, por exemplo `%APPDATA%\FreeCAD\v1-1\Mod`. Use o caminho efetivamente retornado pela instalação em uso e acrescente `Mod\Direct`.
+
+| Diretório de dados retornado, como exemplo | Pasta de instalação da Direct |
+|---|---|
+| `C:\Users\usuario\AppData\Roaming\FreeCAD\` | `C:\Users\usuario\AppData\Roaming\FreeCAD\Mod\Direct\` |
+| `C:\Users\usuario\AppData\Roaming\FreeCAD\v1-1\` | `C:\Users\usuario\AppData\Roaming\FreeCAD\v1-1\Mod\Direct\` |
+
+`usuario` representa o nome da conta do Windows. `%APPDATA%` é uma variável do Windows que aponta para a pasta de dados móveis do usuário. Para abrir sua localização no Explorador, pressione `Win + R`, digite `%APPDATA%` e confirme. Para o destino da bancada, dê preferência ao caminho confirmado pelo console.
+
+**2. Baixar e extrair**
+
+1. Acesse o [repositório FreeCAD-Direct](https://github.com/SergioUhry/FreeCAD-Direct).
+2. Clique no botão **Code** e escolha **Download ZIP**. Um pacote publicado em Releases também pode ser usado quando corresponder à revisão desejada.
+3. Localize o ZIP em Downloads.
+4. Clique com o botão direito e escolha **Extrair Tudo...**.
+5. Abra a pasta extraída até encontrar, juntos, `Init.py`, `InitGui.py`, `package.xml`, `Resources` e `uhrydirect`.
+
+**3. Copiar para a pasta de módulos**
+
+1. No Explorador de Arquivos, abra o diretório de dados identificado no primeiro passo.
+2. Crie a pasta `Mod` caso ela ainda não exista.
+3. Dentro de `Mod`, crie a pasta `Direct`.
+4. Copie o conteúdo da pasta que contém `InitGui.py` para dentro de `Direct`.
+5. Confirme que o arquivo está diretamente em `Mod\Direct\InitGui.py`.
+
+Não deixe uma pasta adicional, como `FreeCAD-Direct-main`, entre `Direct` e `InitGui.py`. Não copie o arquivo ZIP fechado para a pasta de módulos. Instale no diretório de dados do usuário, e não na pasta do programa em `Arquivos de Programas`.
+
+**4. Ativar e conferir**
+
+1. Abra novamente o FreeCAD.
+2. Escolha **Direct** no seletor de bancadas.
+3. Crie ou abra um documento e confira a barra de ferramentas.
+4. Caso a bancada não apareça, revise o destino e a estrutura de pastas. Consulte também **Exibir → Painéis → Vista de relatório** para verificar mensagens de inicialização.
+
+Os nomes dos menus podem variar com o idioma e a versão do FreeCAD. O roteiro utiliza a organização de módulos do usuário documentada pelo projeto FreeCAD. As ferramentas desta revisão têm referência operacional no Linux; a inclusão deste roteiro não representa uma validação integral da bancada no Windows.
+
+**Atualizar no Windows**
+
+Feche o FreeCAD e preserve a pasta anterior em um local de backup fora de `Mod`, para não carregar duas cópias da bancada. Coloque a pasta completa da nova revisão em `Mod\Direct`, mantendo `InitGui.py` diretamente nesse nível. Reabra o FreeCAD e confira os documentos. Preserve os módulos necessários a bases paramétricas já usadas nos arquivos.
+
+**Remover no Windows**
+
+Com o FreeCAD fechado, mova `Mod\Direct` para fora do diretório de módulos. Isso não apaga os documentos do usuário, mas remove a implementação necessária para regenerar objetos personalizados da bancada. Recoloque uma versão compatível antes de editar documentos que dependam desses objetos.
+
+Referência de organização dos diretórios: [documentação oficial de criação e distribuição de bancadas do FreeCAD](https://github.com/FreeCAD/FreeCAD-documentation/blob/main/wiki/Workbench_creation.md).
+
 ### Instalação por Git no Linux
 
 Com o Git disponível e sem uma pasta `Direct` existente no destino, o comando abaixo cria uma cópia local do repositório no diretório usado no ambiente de referência:
@@ -105,6 +171,10 @@ git -C ~/.local/share/FreeCAD/v1-1/Mod/Direct pull --ff-only
 `pull --ff-only` atualiza a cópia local somente quando o avanço pode ocorrer sem criar um commit de mesclagem. Se o comando apontar divergência, examine o histórico antes de continuar.
 
 Reinicie o FreeCAD após a atualização. Documentos com `Base_Direct` paramétrica dependem do módulo `uhrydirect.parametric_body_base` para restaurar seu comportamento ao serem reabertos.
+
+## Leitura das figuras
+
+As figuras deste manual são esquemas de operação com dimensões ilustrativas, não capturas da interface. As setas mostram a sequência ou o deslocamento; os nomes de propriedades correspondem aos citados no texto. O eixo indicado em cada exemplo é parte da referência usada no desenho.
 
 ## Conceitos básicos
 
@@ -145,6 +215,8 @@ Antes de iniciar um comando, confirme o documento ativo e finalize diálogos de 
 | Mover na Árvore | Objeto(s), seguido(s) do contêiner de destino | Reorganização com posição global preservada |
 
 ### Parâmetros
+
+![Exemplo de parâmetros: largura e espessura calculam a largura útil vinculada ao painel.](docs/images/parametros.svg)
 
 Centraliza medidas e expressões do documento e permite vinculá-las às propriedades dos objetos ou às cotas dimensionais de Sketches.
 
@@ -230,6 +302,8 @@ Para uma peça convertida, prefira vincular o parâmetro à propriedade do objet
 
 ### Extrudar Face
 
+![Comparação entre Extrudar Face no Body da peça e Desenhar na Face em uma peça independente.](docs/images/ferramentas-face.svg)
+
 Cria uma extrusão diretamente a partir de uma face plana selecionada, usando a própria face como perfil para um novo Pad, em um fluxo de extrusão direta semelhante ao Push/Pull.
 
 **Como usar**
@@ -301,6 +375,8 @@ A ferramenta foi pensada para iniciar uma nova peça apoiada visualmente em outr
 
 ### Converter para Body
 
+![Estrutura da conversão: Body e Base_Direct com dimensões acessíveis e fonte preservada.](docs/images/converter-body.svg)
+
 Prepara um sólido para receber operações do Part Design e preserva o objeto que gera sua geometria.
 
 **Como usar**
@@ -367,6 +443,8 @@ Mantenha a Direct instalada ao reabrir documentos com essa base paramétrica. A 
 ---
 
 ### Mover por Pontos
+
+![Translação da peça a partir do ponto-base A até o destino B.](docs/images/mover-pontos.svg)
 
 Move ou copia objetos usando o fluxo do comando Move do Draft, com tratamento estrutural específico para Part Design.
 
@@ -557,6 +635,8 @@ Quando usado para selecionar um cruzamento como referência para outras ferramen
 
 ### Peça pelas Guias
 
+![Quatro guias definem um perfil de 600 por 400 mm para um Pad de 18 mm.](docs/images/peca-guias.svg)
+
 Cria a base de uma nova peça a partir de quatro Linhas Guia.
 
 **Como usar**
@@ -581,6 +661,8 @@ A ferramenta rejeita configurações em que as quatro guias não formem dois par
 ---
 
 ### Medidor XYZ Pro
+
+![Distância espacial de 500 mm com componentes de 300 mm e 400 mm no plano XY.](docs/images/medidor-xyz.svg)
 
 Painel acoplável para medir a menor distância entre duas geometrias e decompor o resultado nos eixos globais.
 
@@ -625,6 +707,8 @@ As caixas ao lado de 3D, X, Y e Z definem quais cotas serão criadas.
 ---
 
 ### Matriz Leve
+
+![Quatro peças de 100 mm distribuídas com intervalo de 120 mm, vão de 20 mm e total de 460 mm.](docs/images/matriz-medidas.svg)
 
 Cria repetições ortogonais por vínculos do Draft, evitando duplicar uma construção completa para cada ocorrência. Oferece entrada por intervalo, vão ou dimensão total e um modo especial para pares esquerda/direita.
 
@@ -695,6 +779,8 @@ Nesse modo, a ferramenta fixa duas posições no eixo escolhido e uma nos demais
 O intervalo nativo do Draft pode receber uma compensação para o espelhamento. Para esse par, consulte as propriedades `UhryIntervaloX/Y/Z` como intervalos lógicos e `UhryTotalX/Y/Z` como totais calculados. Não interprete isoladamente o vetor nativo `Interval` como a distância lógica do par.
 
 **Matriz sobre matriz**
+
+![Criação de um par oposto seguida de outra matriz que repete três pares, totalizando seis peças.](docs/images/matriz-par-oposto.svg)
 
 Selecionar uma Matriz Leve existente e executar o comando cria **uma nova matriz que repete o conjunto inteiro**. Não abre automaticamente a edição da matriz selecionada.
 
