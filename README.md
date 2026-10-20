@@ -2,8 +2,11 @@
 
 Workbench para FreeCAD voltada a modelagem direta, criação e edição de peças, posicionamento, linhas guia, medição e matrizes.
 
-**Versão:** 0.9.12
-**FreeCAD:** 1.1+
+**Versão declarada no pacote:** 0.9.12  
+**Revisão de referência:** código do commit `1349efc`, de 20/10/2026  
+**Ambiente de referência:** FreeCAD 1.1.3 no Linux
+
+Este manual descreve o estado do código dessa revisão, incluindo as atualizações de Parâmetros, conversão paramétrica para Body e Matriz Leve posteriores à publicação original da versão 0.9.12. O número do pacote não foi alterado por esta revisão documental.
 
 ## Objetivo
 
@@ -13,7 +16,9 @@ A Direct reúne ferramentas para acelerar tarefas de modelagem e montagem manten
 
 - [Objetivo](#objetivo)
 - [Instalação](#instalação)
+- [Conceitos básicos](#conceitos-básicos)
 - [Ferramentas](#ferramentas)
+  - [Parâmetros](#parâmetros)
   - [Extrudar Face](#extrudar-face)
   - [Desenhar na Face](#desenhar-na-face)
   - [Converter para Body](#converter-para-body)
@@ -28,7 +33,9 @@ A Direct reúne ferramentas para acelerar tarefas de modelagem e montagem manten
   - [Matriz de Furação](#matriz-de-furação)
   - [Mover na Árvore](#mover-na-árvore)
 - [Regras de seleção e posição](#regras-de-seleção-e-posição)
-- [Alterações da versão 0.9.12](#alterações-da-versão-0912)
+- [Fluxos de trabalho](#fluxos-de-trabalho)
+- [Diagnóstico e limitações](#diagnóstico-e-limitações)
+- [Atualizações documentadas](#atualizações-documentadas)
 - [Compatibilidade](#compatibilidade)
 - [Licença](#licença)
 
@@ -36,29 +43,190 @@ A Direct reúne ferramentas para acelerar tarefas de modelagem e montagem manten
 
 ### Instalação manual
 
-Copie a pasta `Direct` para o diretório de módulos do usuário do FreeCAD e reinicie o programa.
+1. Feche o FreeCAD.
+2. Obtenha os arquivos do repositório [FreeCAD-Direct](https://github.com/SergioUhry/FreeCAD-Direct).
+3. Crie uma pasta chamada `Direct` no diretório de módulos do usuário e copie os arquivos da bancada para dentro dela.
+4. Confirme que `Init.py` e `InitGui.py` estão diretamente em `Mod/Direct/`, sem uma pasta adicional entre eles.
+5. Reinicie o FreeCAD e selecione **Direct** no seletor de bancadas.
 
-Linux:
-
-```text
-~/.local/share/FreeCAD/Mod/
-```
-
-A estrutura deve ficar semelhante a:
+No ambiente Linux de referência, o diretório é:
 
 ```text
-Mod/
-└── Direct/
-    ├── Init.py
-    ├── InitGui.py
-    ├── package.xml
-    ├── Resources/
-    └── uhrydirect/
+~/.local/share/FreeCAD/v1-1/Mod/Direct/
 ```
 
-Depois de reiniciar o FreeCAD, selecione a bancada **Direct** no seletor de Workbenches.
+Outras instalações podem usar `~/.local/share/FreeCAD/Mod/Direct/`. Para identificar o diretório da instalação em uso, abra o console Python do FreeCAD e execute:
+
+```python
+App.getUserAppDataDir()
+```
+
+Esse comando apenas informa o diretório de dados do usuário. A pasta da bancada deve ficar em `Mod/Direct/` dentro desse diretório.
+
+| Arquivo ou pasta | Função |
+|---|---|
+| `Init.py` | Inicialização do módulo |
+| `InitGui.py` | Registro da bancada e integração dos comandos |
+| `package.xml` | Identificação, licença e versão declarada do pacote |
+| `Resources/icons/` | Ícones das ferramentas |
+| `uhrydirect/` | Módulos de implementação |
+| `LICENSE` | Termos da licença |
+
+A bancada utiliza os recursos instalados do FreeCAD, incluindo Draft, Part Design, Sketcher e a interface Qt distribuída com o programa. Não é necessário instalar bibliotecas Python externas para os fluxos descritos aqui.
+
+### Instalação por Git no Linux
+
+Com o Git disponível e sem uma pasta `Direct` existente no destino, o comando abaixo cria uma cópia local do repositório no diretório usado no ambiente de referência:
+
+```bash
+git clone https://github.com/SergioUhry/FreeCAD-Direct.git ~/.local/share/FreeCAD/v1-1/Mod/Direct
+```
+
+`git clone` baixa o repositório e seu histórico. O último argumento define a pasta onde a bancada será instalada. Ajuste esse destino se o diretório de dados do seu FreeCAD for diferente.
+
+### Atualização
+
+Feche o FreeCAD antes de substituir os módulos. Preserve uma cópia da instalação anterior e atualize o conjunto completo de arquivos. Não misture módulos de revisões diferentes.
+
+Em uma instalação obtida por Git, primeiro consulte o estado local:
+
+```bash
+git -C ~/.local/share/FreeCAD/v1-1/Mod/Direct status --short
+```
+
+`-C` escolhe o repositório sem mudar a pasta do terminal. `status --short` mostra modificações locais. Se houver arquivos alterados, preserve ou resolva essas alterações antes da atualização.
+
+Com a cópia local sem modificações pendentes, execute:
+
+```bash
+git -C ~/.local/share/FreeCAD/v1-1/Mod/Direct pull --ff-only
+```
+
+`pull --ff-only` atualiza a cópia local somente quando o avanço pode ocorrer sem criar um commit de mesclagem. Se o comando apontar divergência, examine o histórico antes de continuar.
+
+Reinicie o FreeCAD após a atualização. Documentos com `Base_Direct` paramétrica dependem do módulo `uhrydirect.parametric_body_base` para restaurar seu comportamento ao serem reabertos.
+
+## Conceitos básicos
+
+| Termo | Significado no uso da bancada |
+|---|---|
+| Objeto | Elemento do documento, como cubo, Sketch, Body ou Link |
+| Subelemento | Face, aresta ou vértice selecionado dentro de um objeto |
+| Body | Estrutura do Part Design que organiza as operações de uma peça |
+| Part | Contêiner `App::Part` que pode organizar várias peças e conjuntos |
+| Fonte | Objeto cuja geometria ou medida alimenta outro elemento |
+| Ocorrência por vínculo | Repetição que referencia uma origem, em vez de duplicar sua construção inteira |
+| Posição global | Posição no documento após considerar os contêineres superiores |
+| Posição local | Posição relativa ao contêiner ao qual o objeto pertence |
+| Geometria de construção | Referência auxiliar de Sketch, desconsiderada como contorno de um Pad |
+| Expressão | Relação que calcula uma propriedade a partir de valores e referências |
+
+O nome exibido na árvore pode ser diferente do identificador interno. O painel de Parâmetros mostra ambos para ajudar a distinguir objetos com rótulos iguais. Propriedades internas com nomes históricos são mantidas por compatibilidade.
 
 ## Ferramentas
+
+Antes de iniciar um comando, confirme o documento ativo e finalize diálogos de edição que não pertençam à operação desejada. A seleção pode ser feita na árvore ou na vista 3D conforme a referência exigida.
+
+| Ferramenta | Seleção inicial | Resultado principal |
+|---|---|---|
+| Parâmetros | Documento aberto; seleção opcional | Variáveis, fórmulas e vínculos dimensionais |
+| Extrudar Face | Uma face plana | Sketch do contorno e abertura do Pad no Body da peça |
+| Desenhar na Face | Uma face de referência | Novo Body independente e edição de Sketch |
+| Converter para Body | Um sólido; Sketches opcionais | Body com base associativa e fonte preservada |
+| Mover por Pontos | Objeto ou referência da peça | Translação ou cópia pelo fluxo Draft |
+| Manipulador | Exatamente um objeto | Manipulador nativo de translação e rotação |
+| Posicionar Peça | Duas referências, ou guias seguidas da face de destino | Alinhamento geométrico ou posicionamento de guias |
+| Linha Guia | Uma aresta reta ou guia | Guia paralela com distância definida no 3D |
+| Snap Cruzamento de Guias | Ativação pelo botão | Captura exclusiva de cruzamentos válidos |
+| Peça pelas Guias | Quatro guias coplanares em dois pares paralelos | Novo Body e Sketch, com abertura do Pad |
+| Medidor XYZ Pro | Dois elementos para medir | Distância 3D e componentes X/Y/Z |
+| Matriz Leve | Uma peça ou matriz | Repetições por vínculos ou par oposto |
+| Matriz de Furação | Hole/Pocket atual ou matriz existente | Repetição conjunta de cortes |
+| Mover na Árvore | Objeto(s), seguido(s) do contêiner de destino | Reorganização com posição global preservada |
+
+### Parâmetros
+
+Centraliza medidas e expressões do documento e permite vinculá-las às propriedades dos objetos ou às cotas dimensionais de Sketches.
+
+**Acesso e organização**
+
+Com um documento aberto, clique em **Parâmetros** na barra da Direct. O painel **Direct — Parâmetros** abre na área lateral esquerda. O mesmo botão alterna sua exibição. O painel é associado ao documento que estava ativo quando foi aberto; ao mudar de documento, abra novamente a ferramenta para trabalhar no documento correto.
+
+O campo **Escopo das variáveis** oferece:
+
+| Escopo | Uso |
+|---|---|
+| Projeto inteiro | Medidas gerais compartilhadas no documento |
+| Conjunto | Parâmetros identificados com um `App::Part` |
+| Peça | Parâmetros identificados com um `PartDesign::Body` |
+
+O escopo organiza a identificação dos parâmetros. Não aplica medidas automaticamente, não restringe os vínculos aos objetos desse contêiner e não representa um controle de acesso. Cada vínculo precisa ser configurado explicitamente.
+
+**Criar um parâmetro**
+
+1. Escolha o escopo.
+2. Selecione **Criar Novo Parâmetro...**.
+3. Preencha **Nome do parâmetro** com um nome descritivo, como `Largura externa`.
+4. Escolha o tipo.
+5. Informe um valor ou uma fórmula.
+6. Clique em **Salvar parâmetro e recalcular**.
+
+| Tipo | Significado | Exemplo de valor |
+|---|---|---|
+| Comprimento (mm) | Medida linear | `600` corresponde a 600 mm |
+| Ângulo (graus) | Medida angular | `90` corresponde a 90° |
+| Número | Valor numérico sem unidade | `4` |
+
+O tipo de um parâmetro existente não pode ser trocado pelo painel. O campo fica bloqueado durante a edição. Crie outro parâmetro quando precisar de um tipo diferente.
+
+Os dados são salvos no documento em objetos `App::VarSet`, apresentados na árvore com o rótulo **Parâmetros — ...**. Não é necessário manter o painel aberto para que as expressões sejam recalculadas.
+
+**Fórmulas e referências**
+
+Use **Parâmetro para inserir** e **Inserir parâmetro na fórmula** para incluir uma referência existente. O painel apresenta referências legíveis entre chaves e as converte para expressões do FreeCAD ao salvar.
+
+Exemplo: com dois parâmetros de comprimento no escopo Projeto inteiro, chamados `Largura` e `Espessura`, a largura útil pode ser definida por:
+
+```text
+{Projeto / Largura} - 2 * {Projeto / Espessura}
+```
+
+Se `Largura = 600 mm` e `Espessura = 18 mm`, o resultado será `564 mm`. O texto da referência acompanha o nome e o escopo efetivamente cadastrados; use o botão de inserção para evitar diferenças de grafia.
+
+Quando **Fórmula** está preenchido, a fórmula controla o parâmetro e substitui o valor manual. Para voltar a um valor direto, limpe a fórmula, informe o valor e salve. Constantes dimensionais em fórmulas devem usar unidades compatíveis, como `5 mm`. Evite dependências circulares, nas quais um parâmetro depende direta ou indiretamente de si mesmo.
+
+**Vincular a uma dimensão**
+
+1. Salve e selecione o parâmetro desejado.
+2. Em **Vincular a uma medida do 3D**, escolha **Objeto / Sketch**.
+3. Em **Medida**, escolha a propriedade que deverá receber o parâmetro.
+4. Confira a **Expressão atual** apresentada pelo painel.
+5. Clique em **Vincular medida ao parâmetro**.
+6. Altere o parâmetro, salve novamente e confira a atualização do modelo.
+
+O vínculo substitui a expressão anterior da propriedade escolhida. Verifique o objeto e a medida antes de confirmar.
+
+| Elemento | Exemplos de destino |
+|---|---|
+| Cubo paramétrico | `Length`, `Width`, `Height` |
+| Cilindro ou outra primitiva compatível | Propriedades de comprimento, raio e ângulo disponíveis |
+| Pad ou operação compatível | Comprimentos e demais propriedades dimensionais expostas pela operação |
+| Sketch | Cotas dimensionais dirigentes de distância, raio, diâmetro e ângulo |
+| Objeto com Placement | `Placement.Base.x`, `Placement.Base.y`, `Placement.Base.z` |
+
+Selecionar uma face ou aresta no 3D faz o painel acompanhar o objeto e pode sugerir uma dimensão. Essa sugestão usa a orientação geométrica do elemento; ela não cria uma nova cota e não garante que a propriedade sugerida corresponda à intenção do desenho. Confira especialmente objetos rotacionados, operações com múltiplos comprimentos e primitivas que não sejam cubos.
+
+As cotas de Sketch são apresentadas com seu nome ou com uma identificação como **Cota 1**. Somente cotas dimensionais dirigentes são oferecidas; cotas de referência medem a geometria e não a controlam. O caminho interno pode aparecer como `Constraints[0]`: a numeração interna começa em zero.
+
+**Editar e manter vínculos**
+
+Selecione um parâmetro existente, altere seu valor ou sua fórmula e use **Salvar parâmetro e recalcular**. O painel mostra a referência interna usada pelo FreeCAD. Alterar o nome exibido de um parâmetro existente não renomeia essa propriedade interna.
+
+Para retirar o vínculo de uma medida, abra o editor de expressões dessa propriedade no FreeCAD e remova a expressão. A versão atual do painel não oferece um botão específico para excluir parâmetros nem para remover vínculos. Não apague um conjunto de parâmetros que ainda seja referenciado pelo modelo.
+
+Para uma peça convertida, prefira vincular o parâmetro à propriedade do objeto indicado por `Base_Direct.Source`. Assim a fonte continua sendo a origem da dimensão e o campo correspondente da base reflete o valor calculado.
+
+---
 
 ### Extrudar Face
 
@@ -84,7 +252,7 @@ Cria uma extrusão diretamente a partir de uma face plana selecionada, usando a 
 - o objeto é convertido automaticamente para `PartDesign::Body`;
 - a geometria original é preservada em uma base interna `Base_Direct`;
 - posição e aparência são preservadas sempre que compatíveis;
-- o objeto solto anterior é removido somente depois que a conversão é concluída;
+- o objeto original é preservado como fonte editável, ligado à base pela propriedade `Source`, e fica oculto na vista 3D;
 - o Sketch da face é criado dentro desse novo Body;
 - o Pad é aberto imediatamente.
 
@@ -133,30 +301,68 @@ A ferramenta foi pensada para iniciar uma nova peça apoiada visualmente em outr
 
 ### Converter para Body
 
-Converte um sólido comum ou importado em uma estrutura utilizável pelo Part Design.
+Prepara um sólido para receber operações do Part Design e preserva o objeto que gera sua geometria.
 
 **Como usar**
 
-1. Selecione um sólido.
-2. Opcionalmente, selecione também Sketches que devam acompanhar a peça.
+1. Selecione exatamente um objeto com geometria sólida utilizável.
+2. Opcionalmente, selecione Sketches sem geometria externa que devam acompanhar a peça.
 3. Execute **Converter para Body**.
+4. Expanda o Body criado e selecione `Base_Direct`.
+5. Na aba **Dados**, consulte o grupo **Dimensões da fonte**.
 
-**Comportamento**
+Quando o objeto já pertence a um Body, a ferramenta reutiliza esse Body. Não cria uma segunda base nem converte novamente suas operações internas.
 
-- cria um `PartDesign::Body` quando o sólido ainda não pertence a um Body;
-- cria uma base interna `Base_Direct` para o sólido convertido;
-- preserva a posição global da geometria;
-- preserva propriedades visuais compatíveis;
-- se o sólido já pertence a um Body, reutiliza o Body existente em vez de criar outro;
-- Sketches selecionados podem ser incorporados ao mesmo Body preservando sua posição.
+**Estrutura e fonte editável**
 
-**Proteção de geometria externa**
+A nova estrutura contém um `PartDesign::Body` e a base `Base_Direct`, do tipo `PartDesign::FeaturePython`. A propriedade **Source** aponta para o objeto original, que permanece no documento e fica oculto na vista 3D. Essa preservação mantém a identidade da fonte, suas expressões e suas dependências anteriores.
 
-Se um Sketch selecionado possui External Geometry apontando para um sólido que ainda está fora de Body, a conversão conjunta é cancelada. O fluxo seguro é:
+O Body é criado no `App::Part` identificado para a peça, quando existe, preservando o posicionamento inicial. As propriedades visuais compatíveis são copiadas para a base.
 
-1. converter somente o sólido;
-2. usar **Desenhar na Face** no `Base_Direct`;
-3. criar as projeções já dentro do Body.
+A apresentação da fonte como filha de `Base_Direct` pode variar conforme a árvore do FreeCAD. O acesso às dimensões não depende desse agrupamento visual. O duplo clique em `Base_Direct` solicita a seleção da fonte para consultar suas propriedades completas.
+
+**Dimensões disponíveis**
+
+A base apresenta os campos compatíveis que realmente existem na fonte:
+
+| Campo | Significado usual |
+|---|---|
+| `Length` | Comprimento |
+| `Width` | Largura |
+| `Height` | Altura |
+| `Radius`, `Radius1`, `Radius2`, `Radius3` | Raios da primitiva |
+| `Angle`, `Angle1`, `Angle2`, `Angle3` | Ângulos da primitiva |
+
+A lista depende do tipo de objeto. Um cubo apresenta comprimento, largura e altura; uma forma importada sem esses parâmetros não ganha dimensões construtivas ao ser convertida.
+
+Para editar um cubo convertido:
+
+1. Selecione `Base_Direct`.
+2. Altere `Length`, `Width` ou `Height` em **Dimensões da fonte**.
+3. Confirme a entrada e recalcule o documento, se necessário.
+4. Confira a base e as operações posteriores do Body.
+
+A edição é transmitida à fonte. Se uma dimensão da fonte já é controlada por expressão, a medida correspondente da base aparece somente para leitura. Nesse caso, altere o parâmetro ou a expressão original.
+
+**Posição e dependências**
+
+Após a conversão, mova e rotacione a peça pelo Body. A transformação inicial é transferida para ele, enquanto a forma da fonte é usada em coordenadas locais na base. Alterar posteriormente o `Placement` da fonte não reposiciona o Body.
+
+Não apague a fonte. Ela é necessária para regenerar a base. Mudanças na forma podem alterar faces e arestas usadas por operações posteriores; confira Sketches, Pads, cortes e demais dependências após modificações importantes.
+
+A preservação do histórico significa manter os objetos originais que geram a forma. Ela não reconstrói uma sequência nativa de Sketches e operações do Part Design a partir de uma geometria importada.
+
+**Sketches e geometria externa**
+
+Sketches selecionados podem ser incorporados ao Body preservando a posição global. Na conversão de um sólido que ainda está fora de Body, a ferramenta cancela a operação conjunta se qualquer Sketch selecionado possui geometria externa. Essa proteção permanece ativa na revisão atual.
+
+Converta primeiro somente o sólido. Para continuar desenhando **no mesmo Body**, ative esse Body e use os comandos nativos de criação de Sketch do Part Design, verificando o suporte e as referências escolhidas. **Desenhar na Face** tem outra finalidade: cria uma nova peça independente.
+
+**Documentos existentes**
+
+Bases paramétricas da revisão anterior podem receber os campos de dimensão ao reabrir o documento com o módulo atualizado. Bases estáticas antigas, cujo objeto original foi apagado, não permitem recuperar automaticamente os parâmetros descartados. É necessário recuperar a fonte de uma versão anterior ou desfazer a conversão antes de executá-la novamente.
+
+Mantenha a Direct instalada ao reabrir documentos com essa base paramétrica. A forma salva no arquivo não substitui o módulo responsável por sua regeneração.
 
 ---
 
@@ -237,7 +443,18 @@ Quando a seleção não é Face → Face, a ferramenta resolve um ponto para cad
 
 A orientação da peça é preservada no modo Ponto → Ponto.
 
-#### Linha Guia
+#### Linhas Guia → plano de uma face
+
+1. Selecione uma ou várias Linhas Guia.
+2. Com `Ctrl`, selecione por último a face plana de destino.
+3. Use uma vista em que seja possível enxergar a face.
+4. Execute **Posicionar Peça**.
+
+As guias são transladadas pela direção da vista atual até o plano da face, sem rotação. Cada guia precisa ser paralela ao plano de destino; caso contrário, uma translação não consegue colocar toda a linha nesse plano.
+
+O cálculo usa o centro geométrico da guia como referência. Em vista ortográfica, esse centro mantém a mesma posição visual enquanto a profundidade é ajustada. Se a direção da vista for praticamente paralela ao plano da face, a operação é recusada: ajuste a vista e repita.
+
+### Linha Guia
 
 Cria referências geométricas e também funciona como ferramenta de medição rápida diretamente no 3D.
 
@@ -390,9 +607,11 @@ Para arestas circulares e arcos circulares, o centro do círculo é usado como p
 **Resultados**
 
 - `3D`: distância espacial entre os pontos mais próximos;
-- `X`: componente global ΔX;
-- `Y`: componente global ΔY;
-- `Z`: componente global ΔZ.
+- `X`: módulo da diferença global em X;
+- `Y`: módulo da diferença global em Y;
+- `Z`: módulo da diferença global em Z.
+
+As componentes são apresentadas como valores não negativos. Não indicam o sentido de deslocamento. A medição usa os pontos mais próximos entre as geometrias resolvidas; para uma aresta circular selecionada, a referência é o centro do círculo, não sua borda.
 
 #### Cotas de conferência
 
@@ -407,41 +626,99 @@ As caixas ao lado de 3D, X, Y e Z definem quais cotas serão criadas.
 
 ### Matriz Leve
 
-Cria matrizes ortogonais leves usando Draft Link Array e mantém informações próprias de dimensão total.
+Cria repetições ortogonais por vínculos do Draft, evitando duplicar uma construção completa para cada ocorrência. Oferece entrada por intervalo, vão ou dimensão total e um modo especial para pares esquerda/direita.
 
 **Como usar**
 
-1. selecione uma peça, Body, Part ou uma Matriz Leve existente;
-2. execute **Matriz Leve**;
-3. informe quantidades e medidas nos eixos X, Y e Z;
-4. confirme a criação.
+1. Selecione exatamente uma peça, Body, Part ou Matriz Leve.
+2. Execute **Matriz Leve**.
+3. Confira **Dimensões máximas da seleção** e a identificação dos eixos.
+4. Escolha um dos três modos de preenchimento.
+5. Informe a quantidade e a distância em cada eixo que será repetido.
+6. Use **Inverter** quando precisar repetir no sentido negativo do eixo.
+7. Confira as colunas calculadas **Intervalo**, **Vão** e **Uhry Total**.
+8. Defina o nome ou mantenha **Nome automático: quantidade × nome da peça**.
+9. Confirme em **Criar matriz**.
 
-**Modos de entrada**
+A quantidade inclui a primeira posição. Com X = 4, Y = 2 e Z = 1, o resultado contém oito ocorrências. Um eixo com quantidade 1 não produz repetição. A revisão atual aceita até 10.000 ocorrências no total e exige intervalo diferente de zero nos eixos repetidos.
 
-- **Intervalo entre posições**: informa diretamente o passo entre as ocorrências;
-- **Vão entre limites externos**: informa o espaço livre entre peças/conjuntos;
-- **Total desejado**: informa a dimensão total final e a ferramenta calcula o intervalo.
+Os campos de distância recebem valores não negativos; a opção **Inverter** controla o sentido. O diálogo informa se usa eixos globais ou os eixos do conjunto identificado para a seleção. Confira essa referência antes de distribuir peças em conjuntos rotacionados.
 
-A relação usada é:
+**O que significam as medidas**
+
+Para um eixo, considere:
+
+- `S`: dimensão da origem nesse eixo;
+- `N`: quantidade de ocorrências, incluindo a primeira;
+- `P`: intervalo entre posições equivalentes consecutivas;
+- `V`: vão entre os limites externos consecutivos;
+- `T`: dimensão total calculada.
+
+As relações são:
 
 ```text
-Total = tamanho da origem + intervalo × (quantidade - 1)
+T = S + P × (N − 1)
+V = P − S
 ```
+
+| Modo exibido | Valor informado | Cálculo aplicado |
+|---|---|---|
+| Preencher por intervalo | Intervalo `P` | `T = S + P × (N − 1)` |
+| Preencher por vão | Vão `V` | `P = S + V` |
+| Preencher por total | Total desejado `T` | `P = (T − S) / (N − 1)`, quando `N > 1` |
+
+Ao trocar o modo, o diálogo converte os valores para manter a distribuição calculada. Confira o resumo antes de confirmar.
+
+**Exemplo: quatro peças de 100 mm com vão de 20 mm**
+
+| Forma de preencher | Valor no eixo repetido | Resultado |
+|---|---|---|
+| Por intervalo | Quantidade 4; intervalo 120 mm | Total 460 mm |
+| Por vão | Quantidade 4; vão 20 mm | Intervalo 120 mm; total 460 mm |
+| Por total | Quantidade 4; total 460 mm | Intervalo 120 mm; vão 20 mm |
+
+Um intervalo menor que o tamanho da origem produz sobreposição, indicada por vão calculado negativo. O modo por vão não aceita entrada negativa. No modo por total, um valor menor ou igual ao tamanho da origem com quantidade maior que 1 resulta em passo zero e impede a criação; com quantidade 1, o total permanece igual ao tamanho da origem.
 
 **Par oposto / Face oposta**
 
-Permite criar um par formado pela peça original e uma segunda posição espelhada.
+A opção **2ª peça com face oposta (matriz nativa)** cria a origem e uma segunda ocorrência espelhada no eixo escolhido. Use esse modo para ferragens, suportes e peças que formam um par esquerda/direita.
 
-- escolhe-se o eixo X, Y ou Z;
-- a segunda posição usa espelhamento nativo;
-- as faces extremas internas ficam frente a frente;
-- o intervalo lógico e a dimensão total permanecem controlados pela ferramenta.
+1. Selecione a peça original e abra **Matriz Leve**.
+2. Marque a duplicação especial.
+3. Escolha o eixo X, Y ou Z.
+4. Informe intervalo, vão ou total no eixo escolhido.
+5. Confira o sentido e o total calculado.
+6. Crie o par.
+
+Nesse modo, a ferramenta fixa duas posições no eixo escolhido e uma nos demais. O espelhamento altera a orientação da segunda peça, mas mantém a regra de total. Exemplo: origem com 92 mm e intervalo lógico de 1.318 mm resulta em total de 1.410 mm.
+
+O intervalo nativo do Draft pode receber uma compensação para o espelhamento. Para esse par, consulte as propriedades `UhryIntervaloX/Y/Z` como intervalos lógicos e `UhryTotalX/Y/Z` como totais calculados. Não interprete isoladamente o vetor nativo `Interval` como a distância lógica do par.
 
 **Matriz sobre matriz**
 
-Uma Matriz Leve existente pode ser usada como origem de outra Matriz Leve.
+Selecionar uma Matriz Leve existente e executar o comando cria **uma nova matriz que repete o conjunto inteiro**. Não abre automaticamente a edição da matriz selecionada.
 
-Quando a matriz externa usa vão entre conjuntos, o posicionamento pode acompanhar alterações de tamanho da matriz interna, mantendo o vão configurado.
+Fluxo para repetir pares opostos:
+
+1. Crie o par esquerda/direita.
+2. Selecione a matriz desse par.
+3. Execute **Matriz Leve** novamente.
+4. Configure a quantidade de pares e sua distribuição.
+5. Confirme a nova matriz.
+
+Na segunda etapa, a duplicação especial fica desabilitada: a orientação oposta já pertence ao par interno. Cinco ocorrências de um par correspondem a dez peças.
+
+Para uma matriz usada como origem, a dimensão de referência é `UhryTotalX/Y/Z`. A matriz externa recebe expressões que relacionam o intervalo ao total da origem mais o vão calculado entre conjuntos. Quando o total interno muda, o intervalo externo pode acompanhar essa alteração mantendo o vão registrado em `UhryVaoX/Y/Z`.
+
+Esse vínculo de acompanhamento é aplicado na criação da matriz encadeada, inclusive quando a distribuição foi preenchida por intervalo ou total: o vão calculado naquele momento é o valor preservado.
+
+**Consultar e alterar uma matriz existente**
+
+Use a aba **Dados** para consultar `NumberX/Y/Z`, os vetores `IntervalX/Y/Z`, os totais e as propriedades adicionais. Matrizes encadeadas podem ter expressões controlando os intervalos; altere a dimensão ou o vão que alimenta a expressão, em vez de substituí-la sem verificar o vínculo.
+
+Os totais acompanham as quantidades e intervalos vinculados. Para uma origem comum, a dimensão usada no cálculo é registrada quando a matriz é configurada; não se deve presumir que toda mudança posterior na forma da peça atualizará essa dimensão registrada. Confira os limites e os totais quando modificar a origem.
+
+As ocorrências são vínculos, não cópias independentes prontas para receber alterações geométricas diferentes. A fonte fica oculta na vista 3D depois da criação. Preserve-a no documento.
 
 ---
 
@@ -481,7 +758,7 @@ Valores negativos de espaçamento invertem o sentido do eixo correspondente.
 - mantém a operação original;
 - cria um `PartDesign::Feature` dentro do mesmo Body.
 
-Para editar uma matriz já criada, selecione a própria matriz e execute a ferramenta novamente. Se a operação de origem for selecionada e já houver uma matriz associada, a ferramenta pode abrir diretamente o modo de edição.
+A geometria resultante é gravada em uma feature; após alterar a operação original, não presuma uma regeneração automática da matriz. Para reaplicar seus parâmetros ou editar uma matriz já criada, selecione a própria matriz e execute a ferramenta novamente. Se a operação de origem for selecionada e já houver uma matriz associada, a ferramenta pode abrir diretamente o modo de edição.
 
 ---
 
@@ -524,18 +801,98 @@ Em operações que movimentam uma peça, uma face de um Pad pode servir como ref
 
 As ferramentas que trabalham com posição global usam a geometria transformada pelo FreeCAD e evitam reaplicar Placement de forma manual quando isso causaria deslocamento duplicado em estruturas com `App::Part`, `PartDesign::Body` ou `App::Link`.
 
-## Alterações da versão 0.9.12
+## Fluxos de trabalho
 
-- **Extrudar Face** substitui o antigo fluxo Criar Body na Face.
-- Faces pertencentes a um `PartDesign::Body` reutilizam o Body existente.
-- Faces de objetos fora de Body passam por conversão automática para Body antes da extrusão.
-- O objeto de origem fora de Body só é removido após a conversão concluída.
-- O perfil completo da face é copiado para um Sketch independente e o Pad é aberto para configuração.
-- **Desenhar na Face** permanece como fluxo separado para criação de uma nova peça independente.
-- O contorno da face de referência entra no Sketch como geometria de construção, sem External Geometry entre Bodies.
-- Durante a edição do Sketch, sólidos à frente do plano podem ser ocultados temporariamente e são restaurados ao sair.
-- A antiga janela de gerenciamento da Linha Guia permanece removida; a ferramenta opera diretamente pela seleção e pelo cursor.
-- Mantidas as correções do Snap Cruzamento de Guias, leitura global das guias e integração com Mover por Pontos.
+### Peça dimensionada por parâmetros
+
+1. Crie uma primitiva paramétrica ou uma peça com Sketch e operação de extrusão.
+2. Abra **Parâmetros** e cadastre as medidas principais.
+3. Vincule cada parâmetro à dimensão correspondente da fonte.
+4. Use **Converter para Body** se a fonte ainda estiver fora de um Body.
+5. Confira `Base_Direct` e as dimensões que refletem as expressões da fonte.
+6. Continue a construção com operações do Part Design.
+7. Altere um parâmetro, recalcule e confira as operações dependentes.
+
+Para uma espessura de painel, vincule o parâmetro à dimensão que efetivamente controla essa espessura. A direção aparente na tela não substitui a identificação da propriedade construtiva.
+
+### Nova peça apoiada visualmente em outra
+
+1. Selecione a face de referência.
+2. Use **Desenhar na Face**.
+3. Desenhe um perfil fechado, usando o contorno de construção como referência.
+4. Feche o Sketch e configure o Pad.
+5. Use **Posicionar Peça** ou **Mover por Pontos** para ajustes de montagem.
+
+A nova peça é independente. Alterações na face usada como referência não atualizam automaticamente o perfil copiado.
+
+### Peça definida por quatro guias
+
+1. Crie quatro Linhas Guia no mesmo plano, formando dois pares paralelos.
+2. Se necessário, use **Posicionar Peça** para levar guias paralelas ao plano de uma face.
+3. Selecione as quatro guias e execute **Peça pelas Guias**.
+4. Configure a espessura no Pad.
+5. Confira as dimensões com **Medidor XYZ Pro**.
+
+A geometria do Sketch é obtida das posições das guias no momento da criação. Mover as guias depois não redimensiona a peça criada por esse comando.
+
+### Montagem com peças repetidas
+
+1. Finalize a origem que deverá se repetir.
+2. Use **Matriz Leve** para a distribuição comum ou para um par oposto.
+3. Para repetir o par, selecione sua matriz e crie outra matriz sobre ela.
+4. Use **Medidor XYZ Pro** para conferir o espaço entre conjuntos.
+5. Organize as peças com **Mover na Árvore**, preservando sua posição global.
+
+## Diagnóstico e limitações
+
+| Situação | Verificação ou procedimento |
+|---|---|
+| Direct não aparece no seletor | Confirme o diretório de dados em uso, a presença de `InitGui.py` em `Mod/Direct/` e reinicie o FreeCAD |
+| Botão Parâmetros indisponível | Abra um documento e ative a bancada Direct; a ação é integrada à barra após sua criação |
+| Dimensão não aparece na lista do painel | Confira se o objeto selecionado expõe uma propriedade numérica compatível; uma face isolada não cria uma propriedade dimensional nova |
+| Seleção de aresta sugere a medida errada | Escolha explicitamente a propriedade correta; a sugestão automática não identifica a intenção construtiva |
+| Fórmula não pode ser salva | Verifique referências existentes, unidades e dependências circulares |
+| Cota de Sketch não é oferecida | Confirme que a cota é dimensional e dirigente, não uma cota de referência |
+| Base_Direct não apresenta largura, comprimento ou altura | Confira `Source`; esses campos só existem quando a fonte possui propriedades compatíveis |
+| Dimensão da base aparece bloqueada | Edite o parâmetro ou a expressão que controla a dimensão na fonte |
+| Base antiga perdeu os parâmetros | Recupere o objeto original anterior à conversão e converta novamente; uma forma estática não contém o histórico descartado |
+| Base paramétrica apresenta erro ao reabrir | Confira se o módulo da Direct continua instalado e se o objeto apontado por `Source` ainda existe |
+| Conversão com Sketch é cancelada | Converta somente o sólido; a seleção conjunta de Sketch com geometria externa é bloqueada nessa situação |
+| Desenhar na Face abre outra peça | Esse é o comportamento do comando; para trabalhar no Body existente, use Extrudar Face ou crie o Sketch pelos comandos nativos do Part Design |
+| Linha Guia não inicia | Selecione exatamente uma aresta reta ou uma Linha Guia e execute novamente |
+| Snap nativo parece desligado | Verifique se Snap Cruzamento de Guias está ativo em modo exclusivo; desligue-o para restaurar o estado anterior |
+| Peça pelas Guias rejeita a seleção | Confira quatro guias válidas, coplanares, em dois pares paralelos distintos |
+| Guias não podem ser levadas ao plano de uma face | Cada guia precisa ser paralela ao plano; a direção da vista não pode ser paralela a esse plano |
+| Matriz selecionada abre uma nova criação | O comando usa a matriz selecionada como origem de outra matriz; consulte as propriedades da existente na aba Dados |
+| Total da matriz diverge da intenção | Confira quantidade incluindo a origem, dimensão registrada, modo de entrada, eixo e intervalo lógico no caso do par oposto |
+| Matriz de Furação recusa a operação | Confira Hole/Pocket no mesmo Body, recurso anterior disponível e operação na posição atual do histórico |
+| Erro após alterar uma peça | Recalcule e examine suportes e referências de faces/arestas das operações posteriores |
+
+A redução de vínculos externos em alguns comandos não elimina todas as dependências do documento. Perfis copiados são estáticos; vínculos de parâmetros e fontes paramétricas são associativos. Verifique qual comportamento está sendo usado antes de esperar que uma alteração se propague.
+
+O medidor e as cotas de conferência não substituem restrições dimensionais do Sketcher. Matrizes de vínculos não representam, por si só, um processo de fabricação ou um plano de corte.
+
+Para comunicar um problema, informe a versão do FreeCAD, o sistema operacional, a revisão da Direct, a seleção utilizada, os passos para reprodução, o resultado esperado e a mensagem apresentada na Vista de relatório. Quando possível, inclua um documento mínimo que reproduza o comportamento.
+
+## Atualizações documentadas
+
+### Revisão de referência de 20/10/2026
+
+- Painel **Parâmetros** integrado à barra da Direct, com escopos de projeto, conjunto e peça.
+- Cadastro de comprimentos, ângulos e números, com fórmulas e vínculos explícitos a propriedades e cotas dirigentes de Sketches.
+- Conversão para Body com preservação do objeto original e base associativa ligada por `Source`.
+- Dimensões compatíveis acessíveis em `Base_Direct`, com respeito às expressões existentes na fonte.
+- Mesmo mecanismo de preservação da fonte na conversão usada por **Extrudar Face**.
+- Matriz Leve com preenchimento por intervalo, vão e total, duplicação oposta e criação de matrizes sobre matrizes.
+- Documentação dos limites e das diferenças entre geometria copiada, fonte paramétrica e matriz de vínculos.
+
+### Base funcional da versão 0.9.12
+
+- **Extrudar Face** usa o contorno completo de uma face plana e abre o Pad nativo.
+- Faces de peças já pertencentes a Body reutilizam esse Body.
+- **Desenhar na Face** cria uma nova peça independente com referências de construção copiadas.
+- Ocultação temporária de sólidos à frente do plano de edição e restauração ao sair.
+- Linha Guia em modo direto, Snap Cruzamento de Guias exclusivo e integração com Mover por Pontos.
 
 ## Compatibilidade
 
@@ -543,7 +900,7 @@ A interface pública da bancada usa o nome **Direct**.
 
 Alguns nomes de propriedades, comandos e módulos internos anteriores são mantidos para preservar compatibilidade com documentos já criados. Esses identificadores não alteram o nome exibido da bancada.
 
-A versão 0.9.12 foi desenvolvida para FreeCAD 1.1+.
+O pacote declara a versão 0.9.12 e tem FreeCAD 1.1+ como alvo. O ambiente usado como referência operacional nesta revisão é FreeCAD 1.1.3 no Linux. Isso não representa uma validação completa em todas as versões, sistemas operacionais ou estruturas de documento.
 
 ## Licença
 
